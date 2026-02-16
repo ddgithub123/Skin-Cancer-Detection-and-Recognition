@@ -1,0 +1,74 @@
+🧠 PROJECT: AI-Based Skin Cancer Diagnosis
+
+Dataset: HAM10000
+Model: Transfer Learning CNN
+UI: Streamlit
+
+Now supporting:
+
+✅ Binary Classification (Melanoma vs Non-Melanoma)
+✅ Multiclass Classification (7 lesion types)
+
+---
+
+📊 Updated Streamlit Tabs
+
+```
+Tabs:
+- Home
+- How Model Works
+- Live Prediction
+- Performance Metrics
+```
+
+Inside Live Prediction:
+
+* Binary Mode
+* Multiclass Mode
+
+
+--------------------------------------------------------------------------------------------
+
+
+📁 UPDATED FINAL FOLDER STRUCTURE
+
+This is your new professional structure:
+
+```
+SkinCancerAI/
+│
+├── data/
+│
+├── model/
+│   ├── binary_model.h5
+│   ├── multiclass_model.h5
+│   ├── preprocess.py
+│   ├── inference.py
+│   └── __init__.py
+│
+├── training/
+│   ├── binary/
+│   │   ├── history.csv
+│   │   └── test_predictions.csv
+│   │
+│   └── multi_class/
+│       ├── history.csv
+│       └── test_predictions.csv
+│
+├── visuals/
+│   ├── binary/
+│   │   ├── accuracy_curve.png
+│   │   ├── loss_curve.png
+│   │   ├── confusion_matrix.png
+│   │   └── roc_curve.png
+│   │
+│   └── multi_class/
+│       ├── accuracy_curve.png
+│       ├── loss_curve.png
+│       ├── confusion_matrix.png
+│       └── roc_curves.png
+│
+├── app.py
+├── requirements.txt
+└── README.md
+```

@@ -1,0 +1,225 @@
+
+
+---------------------------------------------------------------------------
+
+👩‍💻 DISHA → Model Development (Updated)
+
+
+
+
+🔹 1️⃣ Dataset Preparation
+
+Same dataset for both tasks.
+
+Tasks:
+
+✔ Load images
+✔ Merge metadata
+✔ Encode labels
+
+Binary:
+
+```
+mel → 1
+others → 0
+```
+
+Multiclass:
+
+```
+akiec → 0
+bcc → 1
+bkl → 2
+df → 3
+mel → 4
+nv → 5
+vasc → 6
+```
+
+✔ Stratified split
+✔ Class weights
+
+---
+
+🔹 2️⃣ Model Architecture
+
+Transfer Learning:
+
+* EfficientNetB0 (recommended)
+* OR ResNet50
+
+You will build:
+
+          Model A → Binary
+
+          Output:
+
+          ```
+          Dense(1, activation='sigmoid')
+          ```
+
+          Loss:
+
+          ```
+          binary_crossentropy
+          ```
+
+**********
+
+          Model B → Multiclass
+
+          Output:
+
+          ```
+          Dense(7, activation='softmax')
+          ```
+
+          Loss:
+
+          ```
+          sparse_categorical_crossentropy
+          ```
+
+
+🔹 3️⃣ Training Outputs (Now for Both)
+
+For **binary/**
+
+Save:
+
+```
+training/binary/history.csv
+training/binary/test_predictions.csv
+model/binary_model.h5
+```
+
+For **multi_class/**
+
+Save:
+
+```
+training/multi_class/history.csv
+training/multi_class/test_predictions.csv
+model/multiclass_model.h5
+```
+
+---
+
+🔹 4️⃣ Required for Streamlit (Very Important)
+
+You must provide:
+
+```
+model/preprocess.py
+model/inference.py
+```
+
+Now inference.py supports both:
+
+```python
+predict_binary()
+predict_multiclass()
+```
+
+---
+
+🔹 5️⃣ Optional (Highly Recommended)
+
+Grad-CAM for:
+
+* Binary model
+* Multiclass model
+
+---------------------------------------------------------------------------------
+
+👩‍💻 JERIN → Visualization + Performance (Updated)
+
+
+
+🔹 From Binary Outputs
+
+Generate:
+
+```
+visuals/binary/
+    accuracy_curve.png
+    loss_curve.png
+    confusion_matrix.png
+    roc_curve.png
+```
+
+---
+
+🔹 From Multiclass Outputs
+
+Generate:
+
+```
+visuals/multi_class/
+    accuracy_curve.png
+    loss_curve.png
+    confusion_matrix.png
+    roc_curves.png
+```
+
+---
+
+🔹 Performance Analysis
+
+Binary:
+
+* AUC
+* Sensitivity
+* Specificity
+
+Multiclass:
+
+* Per-class precision
+* Which lesion type is hardest?
+* Class imbalance impact
+
+---
+
+👩‍💻 TEJASRI → Streamlit (Updated)
+
+
+---
+
+🔹 How Model Works Page
+
+User selects:
+
+* Binary Model
+* Multiclass Model
+
+Show:
+
+1️⃣ Uploaded Image
+2️⃣ Preprocessing
+3️⃣ Feature Maps
+4️⃣ Grad-CAM
+
+---
+
+🔹 Live Prediction Page
+
+Add:
+
+```
+Select Task:
+( ) Binary Classification
+( ) Multiclass Classification
+```
+
+If Binary:
+
+* Show melanoma probability
+* Show Grad-CAM
+
+If Multiclass:
+
+* Show 7-class probability bar chart
+* Show predicted lesion name
+* Show Grad-CAM
+
+---
