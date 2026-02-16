@@ -178,7 +178,26 @@ Multiclass:
 * Which lesion type is hardest?
 * Class imbalance impact
 
----
+
+🔹  Streamlit Section You will build: 
+Home Page Content: 
+* Project title 
+* Problem statement 
+* Why skin cancer detection matters 
+* Dataset information 
+* Model summary Make it clean, professional. 
+--- 
+Performance Metrics Page Display: 
+* Confusion matrix image 
+* Accuracy/loss curves 
+* ROC curve 
+* Table of precision/recall 
+Add explanations below each graph. 
+
+Example: > “The model achieves 89% validation accuracy with minimal overfitting.”
+
+
+------------------------------------------------------------------------------------------------------
 
 👩‍💻 TEJASRI → Streamlit (Updated)
 
