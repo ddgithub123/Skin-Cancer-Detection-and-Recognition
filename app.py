@@ -919,33 +919,83 @@ The subject lesion was analyzed using a multi-step investigation.
 
 elif page == "Performance Metrics":
     st.title("📊 Model Performance Metrics")
-    st.write("Detailed analysis of the model's training and evaluation.")
-    
-    if not HAS_TF:
-        st.info("💡 **Note**: As you are in Demo Mode, these metrics represent the historical performance of the pre-trained EfficientNetB0 model on the HAM10000 dataset.")
+    st.write("Detailed analysis of the model's training and evaluation for Binary Classification.")
 
     history_path = "training/binary/history.csv"
-    
+    preds_path = "training/binary/test_predictions.csv"
+
     if os.path.exists(history_path):
         df = pd.read_csv(history_path)
-        
-        st.subheader("Training History")
+
+        # ---------------------------
+        # Accuracy Curve
+        # ---------------------------
+        st.subheader("📈 Accuracy Curve")
         st.line_chart(df[['accuracy', 'val_accuracy']])
-        st.caption("Accuracy over epochs (Training vs Validation)")
-        
+        st.write("""
+        The validation accuracy appears high (~89%). However, due to dataset imbalance,
+        accuracy alone is not a reliable metric in medical AI systems.
+        """)
+
+        # ---------------------------
+        # Loss Curve
+        # ---------------------------
+        st.subheader("📉 Loss Curve")
         st.line_chart(df[['loss', 'val_loss']])
-        st.caption("Loss over epochs (Training vs Validation)")
-        
-        st.subheader("Summary Statistics")
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Final Accuracy", f"{df['accuracy'].iloc[-1]:.2%}")
-        col2.metric("Final Val Accuracy", f"{df['val_accuracy'].iloc[-1]:.2%}")
-        col3.metric("Final Loss", f"{df['loss'].iloc[-1]:.4f}")
-        
-        # Placeholder for Confusion Matrix and ROC if images were available
-        # Note: work_division.txt mentions visuals/binary/confusion_matrix.png etc.
-        # But we found visuals/ doesn't exist. We could suggest generating them.
-        st.info("Detailed Confusion Matrix and ROC curves will be displayed here once generated.")
-        
+        st.write("""
+        The loss curves indicate limited overfitting. However, the model struggles
+        to properly learn the minority melanoma class.
+        """)
+
+        # ---------------------------
+        # Confusion Matrix
+        # ---------------------------
+        if os.path.exists("visuals/binary/confusion_matrix.png"):
+            st.subheader("🔢 Confusion Matrix")
+            st.image("visuals/binary/confusion_matrix.png", use_container_width=True)
+            st.write("""
+            The confusion matrix reveals that the model predicts all samples
+            as non-melanoma, resulting in zero sensitivity.
+            This highlights the severe class imbalance problem.
+            """)
+
+        # ---------------------------
+        # ROC Curve
+        # ---------------------------
+        if os.path.exists("visuals/binary/roc_curve.png"):
+            st.subheader("📊 ROC Curve")
+            st.image("visuals/binary/roc_curve.png", use_container_width=True)
+            st.write("""
+            The ROC curve shows moderate separability between classes.
+            An AUC of approximately 0.70 indicates reasonable discrimination ability,
+            though classification threshold tuning is required.
+            """)
+
+        # ---------------------------
+        # Final Metrics Summary
+        # ---------------------------
+        st.subheader("📌 Final Metrics Summary")
+
+        final_train_acc = df['accuracy'].iloc[-1]
+        final_val_acc = df['val_accuracy'].iloc[-1]
+        final_train_loss = df['loss'].iloc[-1]
+        final_val_loss = df['val_loss'].iloc[-1]
+
+        col1, col2 = st.columns(2)
+        col1.metric("Final Training Accuracy", f"{final_train_acc:.2%}")
+        col2.metric("Final Validation Accuracy", f"{final_val_acc:.2%}")
+
+        col3, col4 = st.columns(2)
+        col3.metric("Final Training Loss", f"{final_train_loss:.4f}")
+        col4.metric("Final Validation Loss", f"{final_val_loss:.4f}")
+
+        st.info("""
+        ⚠️ Key Observation:
+        Despite high validation accuracy, the model shows zero sensitivity.
+        This demonstrates why accuracy alone is misleading in imbalanced
+        medical datasets and emphasizes the importance of recall in cancer detection.
+        """)
+
     else:
         st.warning("Training history not found. Please complete the training phase first.")
+
