@@ -1,5 +1,9 @@
 import numpy as np
-from tensorflow.keras.preprocessing import image
+try:
+    from tensorflow.keras.preprocessing import image
+    HAS_TF = True
+except ImportError:
+    HAS_TF = False
 
 # Same image size used during training
 IMAGE_SIZE = (224, 224)
@@ -7,13 +11,11 @@ IMAGE_SIZE = (224, 224)
 def preprocess_image(img_file):
     """
     Preprocess image for model inference.
-
-    Args:
-        img_file: Uploaded image file (Streamlit file uploader object)
-
-    Returns:
-        Preprocessed image tensor ready for prediction
     """
+    if not HAS_TF:
+        # Return a dummy array if TF is missing
+        return np.zeros((1, 224, 224, 3))
+
     # Load image
     img = image.load_img(img_file, target_size=IMAGE_SIZE)
 
