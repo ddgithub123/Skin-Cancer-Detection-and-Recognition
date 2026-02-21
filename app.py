@@ -72,6 +72,47 @@ task_type = st.sidebar.radio(
 )
 is_binary = "Binary" in task_type
 
+# Global Image Upload - Available on all pages
+st.sidebar.markdown("---")
+st.sidebar.subheader("Upload Your Image")
+uploaded_image = st.sidebar.file_uploader(
+    "Upload a dermatoscopic image to use throughout the app", 
+    type=['jpg', 'jpeg', 'png'], 
+    key="global_image_upload"
+)
+
+# Store image in session state for persistence across pages
+if uploaded_image is not None:
+    st.session_state.current_image = uploaded_image
+elif 'current_image' not in st.session_state:
+    st.session_state.current_image = None
+
+# Image Preview and Management
+if st.session_state.get('current_image'):
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Current Image")
+    try:
+        # Display current image preview
+        current_img = Image.open(st.session_state.current_image)
+        st.sidebar.image(current_img, caption="Current Image", use_column_width=True)
+        
+        # Image info
+        st.sidebar.info(f"**Size:** {current_img.size[0]}x{current_img.size[1]}")
+        st.sidebar.info(f"**Mode:** {current_img.mode}")
+        
+        # Clear image option
+        if st.sidebar.button("🗑️ Clear Image"):
+            st.session_state.current_image = None
+            st.rerun()
+    except Exception as e:
+        st.sidebar.error("Error loading image preview")
+        if st.sidebar.button("🗑️ Clear Image"):
+            st.session_state.current_image = None
+            st.rerun()
+else:
+    st.sidebar.markdown("---")
+    st.sidebar.info("📸 No image uploaded yet. Upload one to use throughout the app!")
+
 if page == "Home":
     st.title(f"🧠 AI-Based Skin Cancer Diagnosis ({'Binary' if is_binary else 'Multiclass'})")
     st.markdown("---")
@@ -274,10 +315,15 @@ elif page == "How Model Works":
             * **Decision**: Highest probability (Argmax) class wins.
             """)
 
-    uploaded_file = st.file_uploader("Upload an image to start the interactive journey", type=['jpg', 'jpeg', 'png'], key="how_it_works")
+    # Use global image from sidebar
+    uploaded_file = st.session_state.get('current_image', None)
     
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
+        st.info("📸 **Using image from sidebar upload**")
+    else:
+        st.warning("⚠️ Please upload an image in the sidebar to begin the interactive journey!")
+        st.image("https://via.placeholder.com/400x300?text=Upload+Image+in+Sidebar", caption="Upload your image in the sidebar to get started")
         
         st.markdown("---")
         
@@ -316,6 +362,9 @@ elif page == "How Model Works":
         st.write("Where is the AI looking? This heatmap shows the areas that most influenced the prediction.")
         
         temp_path = "temp_how_it_works.jpg"
+        # Convert RGBA to RGB if needed (JPEG doesn't support transparency)
+        if image.mode == 'RGBA':
+            image = image.convert('RGB')
         image.save(temp_path)
         
         with st.spinner("Calculating Attention Map..."):
@@ -339,7 +388,8 @@ elif page == "Demo":
         
     st_tabs = st.tabs(tabs)
     
-    demo_img_file = st.sidebar.file_uploader("Upload an image for concept demos", type=['jpg', 'jpeg', 'png'], key="demo_sidebar")
+    # Use global image from sidebar
+    demo_img_file = st.session_state.get('current_image', None)
     
     with st_tabs[0]:
         st.subheader("🏠 Demo Overview")
@@ -729,13 +779,18 @@ elif page == "Live Prediction":
     </style>
     """, unsafe_allow_html=True)
 
-    input_img = st.file_uploader("🔍 Start Your Discovery Quest (Upload Image):", type=['jpg', 'jpeg', 'png'], key="live_pred_quest")
+    # Use global image from sidebar
+    input_img = st.session_state.get('current_image', None)
     
     if input_img is not None:
+        st.info("📸 **Using image from sidebar upload**")
         # Initial Processing
         temp_path = "temp_prediction.jpg"
-        with open(temp_path, "wb") as f:
-            f.write(input_img.getbuffer())
+        image = Image.open(input_img)
+        # Convert RGBA to RGB if needed (JPEG doesn't support transparency)
+        if image.mode == 'RGBA':
+            image = image.convert('RGB')
+        image.save(temp_path)
         
         with st.spinner("Initializing Deep Scan..."):
             if is_binary:
