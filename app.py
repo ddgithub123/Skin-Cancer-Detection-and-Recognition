@@ -444,6 +444,10 @@ elif page == "Learn":
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
 
+        # Convert to RGB (removes alpha channel if exists)
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+
         temp_path = "temp_learn.jpg"
         image.save(temp_path)
 

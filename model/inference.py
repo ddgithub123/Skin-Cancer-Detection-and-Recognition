@@ -96,35 +96,36 @@ def predict_multiclass(img_file):
         "probabilities": probabilities
     }
 
+def generate_gradcam(img_path, model_type="binary"):
 
-def generate_gradcam(img_file, model_type="binary"):
     if not HAS_TF:
-        return np.zeros((7, 7))
+        return np.zeros((224, 224))
 
     active_model = binary_model if model_type == "binary" else multiclass_model
     if active_model is None:
-        return np.zeros((7, 7))
+        return np.zeros((224, 224))
 
-    img = preprocess_image(img_file)
+    # Load & preprocess image
+    img = cv2.imread(img_path)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img = cv2.resize(img, (224, 224))
+    img_array = img.astype("float32") / 255.0
+    img_array = np.expand_dims(img_array, axis=0)
 
-    # Use the specific layer name for this model instance
-    layer_name = None
-    for layer in reversed(active_model.layers):
-        if isinstance(layer, tf.keras.layers.Conv2D):
-            layer_name = layer.name
-            break
-            
-    if not layer_name:
-        return np.zeros((7, 7))
+    # 🔥 IMPORTANT: Use fixed ResNet50 conv layer
+    last_conv_layer_name = "conv5_block3_out"
 
     grad_model = tf.keras.models.Model(
         [active_model.inputs],
-        [active_model.get_layer(layer_name).output, active_model.output]
+        [active_model.get_layer(last_conv_layer_name).output, active_model.output]
     )
 
     with tf.GradientTape() as tape:
-        conv_outputs, predictions = grad_model(img)
-        # For binary, it's (1, 1). For multiclass, it's (1, 7).
+        conv_outputs, predictions = grad_model([img_array])
+
+        if isinstance(predictions, list):
+            predictions = predictions[0]
+
         if model_type == "binary":
             loss = predictions[:, 0]
         else:
@@ -132,23 +133,38 @@ def generate_gradcam(img_file, model_type="binary"):
             loss = predictions[:, class_idx]
 
     grads = tape.gradient(loss, conv_outputs)
-    pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
-    conv_outputs = conv_outputs[0]
-    heatmap = conv_outputs @ pooled_grads[..., tf.newaxis]
-    heatmap = tf.squeeze(heatmap)
-    heatmap = tf.maximum(heatmap, 0) / tf.math.reduce_max(heatmap)
-    return heatmap.numpy()
 
+    # Global average pooling
+    pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
+
+    conv_outputs = conv_outputs[0]
+
+    # 🔥 SAFE weighted sum instead of matrix multiply
+    heatmap = tf.reduce_sum(conv_outputs * pooled_grads, axis=-1)
+
+    heatmap = tf.maximum(heatmap, 0)
+
+    max_val = tf.reduce_max(heatmap)
+
+    if max_val > 0:
+        heatmap /= max_val
+
+    heatmap = heatmap.numpy()
+
+    return heatmap
 
 def overlay_gradcam(original_image_path, heatmap, alpha=0.4):
+
     img = cv2.imread(original_image_path)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img = cv2.resize(img, (224, 224))
 
-    heatmap = cv2.resize(heatmap, (img.shape[1], img.shape[0]))
+    heatmap = cv2.resize(heatmap, (224, 224))
     heatmap = np.uint8(255 * heatmap)
 
     heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
+    heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
 
-    superimposed_img = cv2.addWeighted(img, 1 - alpha, heatmap, alpha, 0)
+    overlay = cv2.addWeighted(img, 0.6, heatmap, 0.4, 0)
 
-    return superimposed_img
+    return overlay
