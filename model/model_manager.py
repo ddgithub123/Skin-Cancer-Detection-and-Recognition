@@ -57,7 +57,7 @@ _BASE = os.path.join(os.path.dirname(__file__))
 MODEL_REGISTRY: Dict[str, ModelConfig] = {
     "binary": ModelConfig(
         task="binary",
-        path=os.path.join(_BASE, "binary_model.h5"),
+        path=os.path.join(_BASE, "binary_model_converted.keras"),
         backbone="efficientnetb0",
         num_classes=1,
         labels=BINARY_LABELS,
@@ -95,6 +95,7 @@ def _check_tf() -> bool:
 
 def get_model(task: str):
     """Return a loaded Keras model for *task*, or None if unavailable."""
+
     if not _check_tf():
         return None
 
@@ -109,7 +110,22 @@ def get_model(task: str):
         return None
 
     import tensorflow as tf
-    model = tf.keras.models.load_model(cfg.path)
+
+    print(f"Loading model for task: {task}")
+    print("Path:", cfg.path)
+
+    # Load both .keras and .h5 safely
+    model = tf.keras.models.load_model(cfg.path, compile=False)
+
+    # Warm-up forward pass (important for Grad-CAM)
+    try:
+        input_shape = model.input_shape
+        dummy = tf.zeros((1,) + tuple(input_shape[1:]))
+        _ = model(dummy, training=False)
+        print("Model warm-up complete ✔")
+    except Exception as e:
+        print("Warm-up skipped:", e)
+
     _model_cache[task] = model
     return model
 

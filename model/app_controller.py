@@ -31,6 +31,7 @@ from typing import Optional
 import numpy as np
 from PIL import Image
 import streamlit as st
+import tensorflow as tf
 
 
 # ──────────────────────────────────────────────
@@ -184,6 +185,9 @@ def ensure_prediction() -> None:
     if model_available(task):
         cfg   = get_config(task)
         model = get_model(task)
+        dummy_input = tf.zeros((1, 224, 224, 3), dtype=tf.float32)
+        _ = model(dummy_input, training=False)
+        print("Backbone from config:", cfg.backbone)
         img_batch = preprocess(image, cfg.backbone)
         try:
             heatmap = compute_gradcam(

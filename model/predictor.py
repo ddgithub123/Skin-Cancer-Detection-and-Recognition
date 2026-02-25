@@ -121,15 +121,12 @@ def predict(
 
 # ──────────────────────────────────────────────
 # Educational helpers
-# ──────────────────────────────────────────────
+def get_feature_maps(task: str, source, layer_index: int = 10):
 
-def get_feature_maps(
-    task: str,
-    source,
-    layer_index: int = 2,
-):
+    print("\n===== FEATURE MAP DEBUG START =====")
 
     if not model_available(task):
+        print("❌ Model not available")
         return []
 
     import tensorflow as tf
@@ -137,66 +134,110 @@ def get_feature_maps(
     model = get_model(task)
     cfg = get_config(task)
 
-    # 1️⃣ Get backbone submodel (EfficientNet or ResNet)
-    backbone = None
-    for layer in model.layers:
-        if isinstance(layer, tf.keras.Model):
-            backbone = layer
-            break
+    print("Task:", task)
+    print("Total top-level layers:", len(model.layers))
 
-    if backbone is None:
-        print("No backbone found")
+    # --------------------------------------------------
+    # BINARY → EfficientNet backbone inside wrapper
+    # --------------------------------------------------
+
+    if task == "binary":
+
+        print("Binary model detected → EfficientNet")
+
+        backbone = model.get_layer("efficientnetb0")
+
+        conv_layers = [
+            l for l in backbone.layers
+            if isinstance(l, tf.keras.layers.Conv2D)
+            and "expand" in l.name
+        ]
+
+        if not conv_layers:
+            print("❌ No conv layers in backbone")
+            return []
+
+        if layer_index >= len(conv_layers):
+            print("❌ layer_index too high")
+            return []
+
+        target_layer = backbone.get_layer("block4a_expand_conv")
+
+        print("Using layer:", target_layer.name)
+
+        feat_model = tf.keras.models.Model(
+            inputs=backbone.input,
+            outputs=target_layer.output,
+        )
+
+        img_batch = preprocess(source, cfg.backbone)
+        feature_volume = feat_model(img_batch, training=False)[0]
+
+    # --------------------------------------------------
+    # MULTICLASS → Flat ResNet model
+    # --------------------------------------------------
+
+    elif task == "multiclass":
+
+        print("Multiclass model detected → Flat ResNet")
+
+        conv_layers = [
+            l for l in model.layers
+            if isinstance(l, tf.keras.layers.Conv2D)
+            and "conv" in l.name
+        ]
+
+        print("Total ResNet conv layers:", len(conv_layers))
+
+        if not conv_layers:
+            print("❌ No conv layers in model")
+            return []
+
+        if layer_index >= len(conv_layers):
+            print("❌ layer_index too high")
+            return []
+
+        target_layer = conv_layers[layer_index]
+
+        print("Using layer:", target_layer.name)
+
+        feat_model = tf.keras.models.Model(
+            inputs=model.input,
+            outputs=target_layer.output,
+        )
+
+        img_batch = preprocess(source, cfg.backbone)
+        feature_volume = feat_model(img_batch, training=False)[0]
+
+    else:
+        print("❌ Unknown task")
         return []
 
-    conv_layers = [
-        l for l in backbone.layers
-        if isinstance(l, tf.keras.layers.Conv2D)
-        and "expand_conv" in l.name
-    ]
+    print("Feature volume shape:", feature_volume.shape)
 
-    if not conv_layers:
-        print("No Conv layers inside backbone")
-        return []
+    # --------------------------------------------------
+    # Normalize maps safely
+    # --------------------------------------------------
 
-    if layer_index >= len(conv_layers):
-        print("Layer index too large")
-        return []
-
-    target_layer = conv_layers[layer_index]
-
-    print("Using feature map layer:", target_layer.name)
-
-    # 3️⃣ Build model from BACKBONE ONLY
-    feat_model = tf.keras.models.Model(
-        inputs=backbone.input,
-        outputs=target_layer.output,
-    )
-
-    # 4️⃣ Preprocess
-    img_batch = preprocess(source, cfg.backbone)
-
-    # 5️⃣ Forward pass (no .predict, call directly)
-    feature_volume = feat_model(img_batch, training=False)
-
-    feature_volume = feature_volume[0]  # remove batch dim
-
-    # 6️⃣ Normalize channels
-    num_channels = min(16, feature_volume.shape[-1])
     maps = []
+    num_channels = min(16, feature_volume.shape[-1])
 
     for c in range(num_channels):
         fm = feature_volume[:, :, c]
+
         lo = tf.reduce_min(fm)
         hi = tf.reduce_max(fm)
-        
-
         range_val = hi - lo
 
         if float(range_val) < 1e-6:
             fm = tf.zeros_like(fm)
         else:
             fm = (fm - lo) / range_val
+
         maps.append(fm.numpy().astype("float32"))
+
+    print("Generated maps:", len(maps))
+    print("===== FEATURE MAP DEBUG END =====\n")
 
     return maps
 

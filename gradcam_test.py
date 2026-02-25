@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 # ===============================
 # CONFIG
 # ===============================
-MODEL_PATH = r".\\model\\multiclass_model.h5"   # change if needed
+MODEL_PATH = r".\\model\\binary_model.h5"   # change if needed
 IMAGE_PATH = r".\\test_images\\1.png"
 IMG_SIZE = (224, 224)
 

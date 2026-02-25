@@ -15,6 +15,7 @@ import numpy as np
 import cv2
 from typing import Optional
 import tensorflow as tf
+from model.app_controller import get_task
 
 
 
@@ -96,84 +97,145 @@ def debug_backbone(model):
 
 
 
+import tensorflow as tf
+import numpy as np
 
 
-def compute_gradcam(model, img_batch, class_index=None):
+def compute_gradcam(model, img_batch, class_index=None, task=None):
 
     debug_backbone(model)
 
+    task = get_task().lower()
+    print("\n===== GRAD-CAM START =====")
+    print("Task:", task)
+
     img_batch = tf.convert_to_tensor(img_batch, dtype=tf.float32)
 
-    # Identify backbone
-    backbone = None
-    for layer in model.layers:
-        if isinstance(layer, tf.keras.Model):
-            backbone = layer
-            break
+    # ==================================================
+    # MULTICLASS (ResNet – flat architecture)
+    # ==================================================
+    if "multi" in task:
 
-    if backbone is None:
-        raise ValueError("Backbone not found in model.")
+        print("Using ResNet flat model")
 
-    backbone_name = backbone.name.lower()
+        target_layer = model.get_layer("conv5_block3_out")
+        print("GradCAM layer:", target_layer.name)
 
-    # Hardcode correct conv layer
-    if "efficientnet" in backbone_name:
-        target_layer = backbone.get_layer("top_conv")
-    elif "resnet" in backbone_name:
-        target_layer = backbone.get_layer("conv5_block3_out")
-    else:
-        raise ValueError("Unsupported backbone.")
+        grad_model = tf.keras.models.Model(
+            inputs=model.input,
+            outputs=[target_layer.output, model.output],
+        )
 
-    print("Using Grad-CAM layer:", target_layer.name)
+        with tf.GradientTape() as tape:
+            conv_outputs, predictions = grad_model(img_batch, training=False)
 
-    # Build grad model using nested layer correctly
-    grad_model = tf.keras.models.Model(
-        inputs=model.input,
-        outputs=[target_layer.output, model.output]
-    )
+            if isinstance(predictions, (list, tuple)):
+                predictions = predictions[0]
 
-    with tf.GradientTape() as tape:
-        conv_outputs, predictions = grad_model(img_batch, training=False)
-
-        if predictions.shape[-1] == 1:
-            target = predictions[:, 0]
-        else:
             if class_index is None:
                 class_index = tf.argmax(predictions[0])
+
             target = predictions[:, class_index]
 
-    grads = tape.gradient(target, conv_outputs)
+        grads = tape.gradient(target, conv_outputs)
 
-    if grads is None:
-        raise RuntimeError("Gradients are None.")
+    # ==================================================
+    # BINARY (EfficientNet – nested backbone)
+    # ==================================================
+    elif "binary" in task:
 
-    pooled_grads = tf.reduce_mean(grads, axis=(0, 1, 2))
+        print("→ Binary mode – avoiding sub-model creation to prevent KeyError")
+
+        try:
+            backbone = model.get_layer("efficientnetb0")
+        except Exception as e:
+            print("Cannot find 'efficientnetb0' layer →", e)
+            raise
+
+        # Choose best layer (top_activation usually gives nicest maps)
+        layer_name = "top_activation"
+        try:
+            target_layer = backbone.get_layer(layer_name)
+            print(f"  Using layer: {layer_name}")
+        except:
+            layer_name = "top_conv"
+            target_layer = backbone.get_layer(layer_name)
+            print(f"  Fallback to: {layer_name}")
+
+        # ─── Get activations by calling backbone directly ────────
+        # This is safe because backbone is already built/called
+        conv_outputs = backbone(img_batch, training=False)
+        print("  Backbone activations shape:", conv_outputs.shape)
+
+        # ─── GradientTape – watch the activations tensor ────────
+        with tf.GradientTape() as tape:
+            tape.watch(conv_outputs)
+
+            # Manual forward through classifier head (same as your test script)
+            x = model.get_layer("global_average_pooling2d")(conv_outputs)
+            x = model.get_layer("batch_normalization")(x)
+            x = model.get_layer("dropout")(x)
+            x = model.get_layer("dense")(x)
+            x = model.get_layer("batch_normalization_1")(x)
+            x = model.get_layer("dropout_1")(x)
+            predictions = model.get_layer("dense_1")(x)
+
+            pred_value = predictions[:, 0]
+            print(f"  Sigmoid output: {pred_value.numpy().item():.6f}")
+
+            # Same target as test script
+            target = tf.math.log(pred_value + 1e-8)
+
+        grads = tape.gradient(target, conv_outputs)
+
+        if grads is None:
+            print("!!! GRADIENTS ARE NONE !!! Possible causes:")
+            print("  - Model is extremely confident → gradients vanish")
+            print("  - Graph disconnection between backbone and head")
+            return np.zeros((7, 7), dtype=np.float32)  # small fallback
+
+        print("  Gradients computed | shape:", grads.shape)
+        print(f"  Grad mean/std/max: {tf.reduce_mean(grads):.3e}  {tf.math.reduce_std(grads):.3e}  {tf.reduce_max(tf.abs(grads)):.3e}")
+
+    # ==================================================
+    # BUILD HEATMAP (Unified for both)
+    # ==================================================
     conv_outputs = conv_outputs[0]
+    grads = grads[0]
 
-    heatmap = tf.reduce_sum(conv_outputs * pooled_grads, axis=-1)
+    # Positive gradients only for cleaner map
+    grads = tf.nn.relu(grads)
+
+    weights = tf.reduce_mean(grads, axis=(0, 1))
+    heatmap = tf.reduce_sum(conv_outputs * weights, axis=-1)
     heatmap = tf.nn.relu(heatmap)
 
     heatmap = heatmap.numpy()
-    max_val = heatmap.max()
+    max_val = heatmap.max() if heatmap.size > 0 else 0
+
+    # ──── Add / uncomment these lines ────────────────────────────────
+
+    print("━"*60)
+    print("DIAGNOSTIC ─ BINARY GRAD-CAM")
+    print("Task                  :", task)
+    print("Prediction (sigmoid)  :", float(predictions[0,0]) if 'predictions' in locals() else "—")
+    print("Target value (log)    :", target.numpy().item() if 'target' in locals() else "—")
+    print("Conv outputs shape    :", conv_outputs.shape)
+    print("Gradients shape       :", grads.shape if grads is not None else "None!")
+    print("Grad mean / std / max :", 
+        float(tf.reduce_mean(grads)) if grads is not None else "—",
+        float(tf.math.reduce_std(grads)) if grads is not None else "—",
+        float(tf.reduce_max(tf.abs(grads))) if grads is not None else "—")
+    print("Heatmap before norm   : min =", heatmap.min(), "max =", heatmap.max())
+    print("━"*60)
 
     if max_val > 1e-8:
         heatmap /= max_val
     else:
-        heatmap[:] = 0
+        heatmap.fill(0)
 
+    print("===== GRAD-CAM SUCCESS =====\n")
     return heatmap.astype(np.float32)
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
